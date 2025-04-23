@@ -86,79 +86,105 @@ plt.savefig("features.png")
 def detect_significant_changes(mfccs, loudness, window_size=4):
     """
     Detects significant changes in MFCCs and loudness over time using a sliding window.
-    Returns two separate dataframes for MFCC and loudness changes.
+    Returns a dictionary with lists of timestamps for each change type.
     """
-    # Initialize lists for MFCC changes
-    mfcc_timestamps = []
-    mfcc_changes = []
-    mfcc_directions = []
+    # Dictionary to store timestamps by category - only major changes
+    changes = {
+        "mfcc_increase": [],
+        "mfcc_decrease": [],
+        "rms_increase": [],
+        "rms_decrease": [],
+    }
 
-    # Initialize lists for loudness changes
-    loudness_timestamps = []
-    loudness_changes = []
-    loudness_directions = []
+    # Define thresholds - only major thresholds
+    major_mfcc_threshold = 25
+    major_loudness_threshold = 0.15
 
-    # Define thresholds
-    major_mfcc_threshold = 0.5
-    medium_mfcc_threshold = 0.2
-    major_loudness_threshold = 0.02
-    medium_loudness_threshold = 0.01
+    # Number of frames to analyze (minimum of both feature arrays)
+    n_frames = min(mfccs.shape[1], loudness.shape[1])
 
     # Use a sliding window to detect changes
-    for i in range(window_size, mfccs.shape[1]):
+    for i in range(window_size, n_frames):
         # Calculate change in MFCCs
         mfcc_diff = np.mean(np.abs(mfccs[:, i] - mfccs[:, i - window_size]))
-        mfcc_direction = (
-            "Increase"
-            if np.mean(mfccs[:, i]) > np.mean(mfccs[:, i - window_size])
-            else "Decrease"
-        )
-        # Track MFCC changes separately
-        if mfcc_diff > medium_mfcc_threshold:
-            mfcc_timestamps.append(i)
-            mfcc_changes.append(mfcc_diff)
-            category = "Major" if mfcc_diff > major_mfcc_threshold else "Medium"
-            mfcc_directions.append(f"{category} {mfcc_direction}")
+        mfcc_direction = np.mean(mfccs[:, i]) > np.mean(mfccs[:, i - window_size])
 
-    for i in range(window_size, loudness.shape[1]):
+        # Track MFCC changes - only major changes
+        if mfcc_diff > major_mfcc_threshold:
+            timestamp = frame_to_time(i, sr, hop_length=hop_length)
+            if mfcc_direction:
+                changes["mfcc_increase"].append(timestamp)
+            else:
+                changes["mfcc_decrease"].append(timestamp)
+
         # Calculate change in loudness
         loudness_diff = np.abs(loudness[0, i] - loudness[0, i - window_size])
-        loudness_direction = (
-            "Increase" if loudness[0, i] > loudness[0, i - window_size] else "Decrease"
+        loudness_direction = loudness[0, i] > loudness[0, i - window_size]
+
+        # Track loudness (RMS) changes - only major changes
+        if loudness_diff > major_loudness_threshold:
+            timestamp = frame_to_time(i, sr, hop_length=hop_length)
+            if loudness_direction:
+                changes["rms_increase"].append(timestamp)
+            else:
+                changes["rms_decrease"].append(timestamp)
+
+    # Consolidate nearby change points
+    consolidated_changes = {}
+    for category in changes.keys():
+        consolidated_changes[category] = consolidate_timestamps(
+            changes[category], time_threshold=1.0
         )
 
-        # Track loudness changes separately
-        if loudness_diff > medium_loudness_threshold:
-            loudness_timestamps.append(i)
-            loudness_changes.append(loudness_diff)
-            category = "Major" if loudness_diff > major_loudness_threshold else "Medium"
-            loudness_directions.append(f"{category} {loudness_direction}")
+    # Also store the frame numbers for plotting purposes
+    consolidated_changes["frames"] = {
+        "mfcc_increase": [],
+        "mfcc_decrease": [],
+        "rms_increase": [],
+        "rms_decrease": [],
+    }
 
-    # Create DataFrame for MFCC changes
-    mfcc_df = pd.DataFrame(
-        {
-            "frame": mfcc_timestamps,
-            "time_sec": [
-                frame_to_time(t, sr, hop_length=hop_length) for t in mfcc_timestamps
-            ],
-            "mfcc_change": mfcc_changes,
-            "category": mfcc_directions,
-        }
-    )
+    # Convert timestamps back to frame numbers
+    for category in consolidated_changes.keys():
+        if category != "frames":
+            consolidated_changes["frames"][category] = [
+                time_to_frame(t, sr, hop_length=hop_length)
+                for t in consolidated_changes[category]
+            ]
 
-    # Create DataFrame for loudness changes
-    loudness_df = pd.DataFrame(
-        {
-            "frame": loudness_timestamps,
-            "time_sec": [
-                frame_to_time(t, sr, hop_length=hop_length) for t in loudness_timestamps
-            ],
-            "loudness_change": loudness_changes,
-            "category": loudness_directions,
-        }
-    )
+    return consolidated_changes
 
-    return mfcc_df, loudness_df
+
+def consolidate_timestamps(timestamps, time_threshold=1.0):
+    """
+    Group timestamps that are within time_threshold seconds of each other
+    and return a single timestamp for each group (the average of the group).
+    """
+    if not timestamps:
+        return []
+
+    # Sort timestamps
+    sorted_timestamps = sorted(timestamps)
+
+    # Initialize result with the first timestamp
+    consolidated = []
+    current_group = [sorted_timestamps[0]]
+
+    # Group timestamps that are close to each other
+    for t in sorted_timestamps[1:]:
+        if t - current_group[-1] <= time_threshold:
+            # Add to current group
+            current_group.append(t)
+        else:
+            # Finalize current group and start a new one
+            consolidated.append(sum(current_group) / len(current_group))
+            current_group = [t]
+
+    # Add the last group
+    if current_group:
+        consolidated.append(sum(current_group) / len(current_group))
+
+    return consolidated
 
 
 def frame_to_time(frame_number, sr, hop_length=512):
@@ -166,30 +192,53 @@ def frame_to_time(frame_number, sr, hop_length=512):
     return frame_number * hop_length / sr
 
 
-# Usage:
-mfcc_changes, loudness_changes = detect_significant_changes(mfccs, loudness)
-print("MFCC Changes:")
-print(mfcc_changes.head(5))
-print("\nLoudness Changes:")
-print(loudness_changes.head(5))
+def time_to_frame(time_sec, sr, hop_length=512):
+    """Convert time in seconds to frame number."""
+    return int(time_sec * sr / hop_length)
 
-# Plot with separate change points
+
+# Usage:
+changes = detect_significant_changes(mfccs, loudness)
+
+# Print the number of detected changes
+for category, timestamps in changes.items():
+    if category != "frames":
+        print(f"{category}: {len(timestamps)} changes")
+        if timestamps:
+            print(f"  Timestamps: {timestamps}")
+
+# Plot with color-coded change points
 plt.figure(figsize=(12, 8))
 
-# Plot MFCCs with MFCC change points
+# Plot MFCCs with change points
 plt.subplot(2, 1, 1)
-plt.title("MFCCs with change points")
+plt.title("MFCCs with major change points")
 plt.imshow(mfccs, aspect="auto", origin="lower")
 plt.colorbar()
-for idx, row in mfcc_changes.iterrows():
-    plt.axvline(x=row["frame"], color="r", linestyle="--", alpha=0.5)
 
-# Plot Loudness with loudness change points
+# Add MFCC change markers
+for frame in changes["frames"]["mfcc_increase"]:
+    plt.axvline(x=frame, color="red", linestyle="-", alpha=0.5)
+for frame in changes["frames"]["mfcc_decrease"]:
+    plt.axvline(x=frame, color="blue", linestyle="-", alpha=0.5)
+
+# Plot Loudness with change points
 plt.subplot(2, 1, 2)
-plt.title("Loudness with change points")
+plt.title("Loudness with major change points")
 plt.plot(loudness[0])
-for idx, row in loudness_changes.iterrows():
-    plt.axvline(x=row["frame"], color="g", linestyle="--", alpha=0.5)
+
+# Add RMS change markers
+for frame in changes["frames"]["rms_increase"]:
+    plt.axvline(x=frame, color="red", linestyle="--", alpha=0.5)
+for frame in changes["frames"]["rms_decrease"]:
+    plt.axvline(x=frame, color="blue", linestyle="--", alpha=0.5)
+
+# Add a legend
+plt.figlegend(
+    ["Loudness", "Increase", "Decrease"],
+    loc="lower center",
+    ncol=3,
+)
 
 plt.tight_layout()
 plt.savefig("features_with_changes.png")
