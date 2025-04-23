@@ -62,13 +62,14 @@ y, sr = librosa.load("input.mp3", sr=sr)
 
 # # get chords from the whole track
 # ...
-# ..
 
 # get sequences of features over time
-mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=8)
+hop_length = 512 * 8  # Use consistent hop length
+mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=8, hop_length=hop_length)
 loudness = librosa.feature.rms(
-    y=y, frame_length=2048 * 8, hop_length=512 * 8
+    y=y, frame_length=2048 * 8, hop_length=hop_length
 )  # Simple RMS as perceptual loudness
+
 # plot each feature
 plt.figure(figsize=(12, 8))
 plt.subplot(2, 1, 1)
@@ -82,72 +83,82 @@ plt.savefig("features.png")
 
 
 # get major turn points in these features
-# categorize them as "major increase", "medium increase", "major decrease", "medium decrease"
-# and keep their timestamps
-def detect_significant_changes(mfccs, loudness, window_size=20):
+def detect_significant_changes(mfccs, loudness, window_size=4):
     """
     Detects significant changes in MFCCs and loudness over time using a sliding window.
-    Returns a dataframe with timestamps of significant changes.
-
-    Args:
-        mfccs: MFCC features with shape (n_mfcc, n_frames)
-        loudness: RMS loudness with shape (1, n_frames)
-        window_size: Size of window to detect changes (in frames)
+    Returns two separate dataframes for MFCC and loudness changes.
     """
-    # Number of frames (use the minimum to handle different lengths)
-    n_frames = min(mfccs.shape[1], loudness.shape[1])
-
-    # Initialize lists to store results
-    timestamps = []
+    # Initialize lists for MFCC changes
+    mfcc_timestamps = []
     mfcc_changes = []
+    mfcc_directions = []
+
+    # Initialize lists for loudness changes
+    loudness_timestamps = []
     loudness_changes = []
-    categories = []
+    loudness_directions = []
 
     # Define thresholds
-    major_threshold = 0.5
-    medium_threshold = 0.2
+    major_mfcc_threshold = 0.5
+    medium_mfcc_threshold = 0.2
+    major_loudness_threshold = 0.02
+    medium_loudness_threshold = 0.01
 
     # Use a sliding window to detect changes
-    for i in range(window_size, n_frames):
-        # Calculate change in MFCCs (average across all coefficients)
+    for i in range(window_size, mfccs.shape[1]):
+        # Calculate change in MFCCs
         mfcc_diff = np.mean(np.abs(mfccs[:, i] - mfccs[:, i - window_size]))
+        mfcc_direction = (
+            "Increase"
+            if np.mean(mfccs[:, i]) > np.mean(mfccs[:, i - window_size])
+            else "Decrease"
+        )
+        # Track MFCC changes separately
+        if mfcc_diff > medium_mfcc_threshold:
+            mfcc_timestamps.append(i)
+            mfcc_changes.append(mfcc_diff)
+            category = "Major" if mfcc_diff > major_mfcc_threshold else "Medium"
+            mfcc_directions.append(f"{category} {mfcc_direction}")
 
+    for i in range(window_size, loudness.shape[1]):
         # Calculate change in loudness
         loudness_diff = np.abs(loudness[0, i] - loudness[0, i - window_size])
+        loudness_direction = (
+            "Increase" if loudness[0, i] > loudness[0, i - window_size] else "Decrease"
+        )
 
-        # Only add points with significant changes
-        if mfcc_diff > medium_threshold or loudness_diff > medium_threshold:
-            timestamps.append(i)
-            mfcc_changes.append(mfcc_diff)
+        # Track loudness changes separately
+        if loudness_diff > medium_loudness_threshold:
+            loudness_timestamps.append(i)
             loudness_changes.append(loudness_diff)
+            category = "Major" if loudness_diff > major_loudness_threshold else "Medium"
+            loudness_directions.append(f"{category} {loudness_direction}")
 
-            # Categorize the change
-            if mfcc_diff > major_threshold:
-                categories.append("Major MFCC Change")
-            elif mfcc_diff > medium_threshold:
-                categories.append("Medium MFCC Change")
-            elif loudness_diff > major_threshold:
-                categories.append("Major Loudness Change")
-            elif loudness_diff > medium_threshold:
-                categories.append("Medium Loudness Change")
-            else:
-                categories.append("Minor Change")
-
-    # Create DataFrame
-    df = pd.DataFrame(
+    # Create DataFrame for MFCC changes
+    mfcc_df = pd.DataFrame(
         {
-            "timestamp": timestamps,
-            "frame": timestamps,  # Keep the frame number
+            "frame": mfcc_timestamps,
             "time_sec": [
-                frame_to_time(t, sr, hop_length=512 * 8) for t in timestamps
-            ],  # Convert frames to seconds
+                frame_to_time(t, sr, hop_length=hop_length) for t in mfcc_timestamps
+            ],
             "mfcc_change": mfcc_changes,
-            "loudness_change": loudness_changes,
-            "category": categories,
+            "category": mfcc_directions,
         }
     )
 
-    return df
+    # Create DataFrame for loudness changes
+    loudness_df = pd.DataFrame(
+        {
+            "frame": loudness_timestamps,
+            "time_sec": [
+                frame_to_time(t, sr, hop_length=hop_length) for t in loudness_timestamps
+            ],
+            "loudness_change": loudness_changes,
+            "category": loudness_directions,
+        }
+    )
+
+    return mfcc_df, loudness_df
 
 
 def frame_to_time(frame_number, sr, hop_length=512):
@@ -155,31 +166,30 @@ def frame_to_time(frame_number, sr, hop_length=512):
     return frame_number * hop_length / sr
 
 
-# Replace your encode_changes and categorize_changes calls with:
-significant_changes = detect_significant_changes(mfccs, loudness)
-print(significant_changes)
+# Usage:
+mfcc_changes, loudness_changes = detect_significant_changes(mfccs, loudness)
+print("MFCC Changes:")
+print(mfcc_changes.head(5))
+print("\nLoudness Changes:")
+print(loudness_changes.head(5))
 
-# Optional: Plot the significant change points on your features
+# Plot with separate change points
 plt.figure(figsize=(12, 8))
 
-# Plot MFCCs
+# Plot MFCCs with MFCC change points
 plt.subplot(2, 1, 1)
 plt.title("MFCCs with change points")
 plt.imshow(mfccs, aspect="auto", origin="lower")
 plt.colorbar()
-# Mark significant changes
-for idx, row in significant_changes.iterrows():
-    if "MFCC" in row["category"]:
-        plt.axvline(x=row["frame"], color="r", linestyle="--", alpha=0.5)
+for idx, row in mfcc_changes.iterrows():
+    plt.axvline(x=row["frame"], color="r", linestyle="--", alpha=0.5)
 
-# Plot Loudness
+# Plot Loudness with loudness change points
 plt.subplot(2, 1, 2)
 plt.title("Loudness with change points")
 plt.plot(loudness[0])
-# Mark significant changes
-for idx, row in significant_changes.iterrows():
-    if "Loudness" in row["category"]:
-        plt.axvline(x=row["frame"], color="r", linestyle="--", alpha=0.5)
+for idx, row in loudness_changes.iterrows():
+    plt.axvline(x=row["frame"], color="g", linestyle="--", alpha=0.5)
 
 plt.tight_layout()
 plt.savefig("features_with_changes.png")
