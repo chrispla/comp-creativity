@@ -187,12 +187,12 @@ def consolidate_timestamps(timestamps, time_threshold=1.0):
     return consolidated
 
 
-def frame_to_time(frame_number, sr, hop_length=512):
+def frame_to_time(frame_number, sr, hop_length=512 * 8):
     """Convert frame number to time in seconds."""
     return frame_number * hop_length / sr
 
 
-def time_to_frame(time_sec, sr, hop_length=512):
+def time_to_frame(time_sec, sr, hop_length=512 * 8):
     """Convert time in seconds to frame number."""
     return int(time_sec * sr / hop_length)
 
@@ -234,10 +234,26 @@ for frame in changes["frames"]["rms_decrease"]:
     plt.axvline(x=frame, color="blue", linestyle="--", alpha=0.5)
 
 # Add a legend
+custom_lines = [
+    plt.Line2D([0], [0], color="black", lw=2),
+    plt.Line2D([0], [0], color="red", linestyle="-", alpha=0.5),
+    plt.Line2D([0], [0], color="blue", linestyle="-", alpha=0.5),
+    plt.Line2D([0], [0], color="red", linestyle="--", alpha=0.5),
+    plt.Line2D([0], [0], color="blue", linestyle="--", alpha=0.5),
+]
+
 plt.figlegend(
-    ["Loudness", "Increase", "Decrease"],
+    custom_lines,
+    [
+        "Loudness",
+        "MFCC Increase",
+        "MFCC Decrease",
+        "Loudness Increase",
+        "Loudness Decrease",
+    ],
     loc="lower center",
-    ncol=3,
+    ncol=5,
+    bbox_to_anchor=(0.5, 0.01),
 )
 
 plt.tight_layout()
