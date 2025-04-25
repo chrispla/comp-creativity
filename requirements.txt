@@ -17,3 +17,7 @@ laion-clap==1.1.3
 nnAudio
 safetensors
 matplotlib
+pyrubberband
+pyyaml
+mir_eval
+pretty_midi
