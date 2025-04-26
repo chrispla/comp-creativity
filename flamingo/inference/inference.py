@@ -206,11 +206,11 @@ def predict(
     return output_decoded
 
 
-def caption_from_file(input_file, output_file=None):
+def caption_from_file(input_file, output_file=None, token=None):
     snapshot_download(
         repo_id="nvidia/audio-flamingo-2-0.5B",
         local_dir="./flamingo/",
-        token="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",
+        token=token,
     )
 
     config = yaml.load(
