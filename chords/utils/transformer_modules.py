@@ -1,11 +1,12 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
+
+import math
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-import math
+
 
 def _gen_bias_mask(max_length):
     """
@@ -15,6 +16,7 @@ def _gen_bias_mask(max_length):
     torch_mask = torch.from_numpy(np_mask).type(torch.FloatTensor)
     return torch_mask.unsqueeze(0).unsqueeze(1)
 
+
 def _gen_timing_signal(length, channels, min_timescale=1.0, max_timescale=1.0e4):
     """
     Generates a [1, length, channels] timing signal consisting of sinusoids
@@ -23,19 +25,22 @@ def _gen_timing_signal(length, channels, min_timescale=1.0, max_timescale=1.0e4)
     """
     position = np.arange(length)
     num_timescales = channels // 2
-    log_timescale_increment = (
-            math.log(float(max_timescale) / float(min_timescale)) /
-            (float(num_timescales) - 1))
+    log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / (
+        float(num_timescales) - 1
+    )
     inv_timescales = min_timescale * np.exp(
-        np.arange(num_timescales).astype(np.float) * -log_timescale_increment)
+        np.arange(num_timescales).astype(float) * -log_timescale_increment
+    )
     scaled_time = np.expand_dims(position, 1) * np.expand_dims(inv_timescales, 0)
 
     signal = np.concatenate([np.sin(scaled_time), np.cos(scaled_time)], axis=1)
-    signal = np.pad(signal, [[0, 0], [0, channels % 2]],
-                    'constant', constant_values=[0.0, 0.0])
+    signal = np.pad(
+        signal, [[0, 0], [0, channels % 2]], "constant", constant_values=[0.0, 0.0]
+    )
     signal = signal.reshape([1, length, channels])
 
     return torch.from_numpy(signal).type(torch.FloatTensor)
+
 
 class LayerNorm(nn.Module):
     # Borrowed from jekbradbury
@@ -51,33 +56,44 @@ class LayerNorm(nn.Module):
         std = x.std(-1, keepdim=True)
         return self.gamma * (x - mean) / (std + self.eps) + self.beta
 
+
 class OutputLayer(nn.Module):
     """
     Abstract base class for output layer.
     Handles projection to output labels
     """
+
     def __init__(self, hidden_size, output_size, probs_out=False):
         super(OutputLayer, self).__init__()
         self.output_size = output_size
         self.output_projection = nn.Linear(hidden_size, output_size)
         self.probs_out = probs_out
-        self.lstm = nn.LSTM(input_size=hidden_size, hidden_size=int(hidden_size/2), batch_first=True, bidirectional=True)
+        self.lstm = nn.LSTM(
+            input_size=hidden_size,
+            hidden_size=int(hidden_size / 2),
+            batch_first=True,
+            bidirectional=True,
+        )
         self.hidden_size = hidden_size
 
     def loss(self, hidden, labels):
-        raise NotImplementedError('Must implement {}.loss'.format(self.__class__.__name__))
+        raise NotImplementedError(
+            "Must implement {}.loss".format(self.__class__.__name__)
+        )
+
 
 class SoftmaxOutputLayer(OutputLayer):
     """
     Implements a softmax based output layer
     """
+
     def forward(self, hidden):
         logits = self.output_projection(hidden)
         probs = F.softmax(logits, -1)
         # _, predictions = torch.max(probs, dim=-1)
         topk, indices = torch.topk(probs, 2)
-        predictions = indices[:,:,0]
-        second = indices[:,:,1]
+        predictions = indices[:, :, 0]
+        second = indices[:, :, 1]
         if self.probs_out is True:
             return logits
             # return probs
@@ -88,14 +104,24 @@ class SoftmaxOutputLayer(OutputLayer):
         log_probs = F.log_softmax(logits, -1)
         return F.nll_loss(log_probs.view(-1, self.output_size), labels.view(-1))
 
+
 class MultiHeadAttention(nn.Module):
     """
     Multi-head attention as per https://arxiv.org/pdf/1706.03762.pdf
     Refer Figure 2
     """
 
-    def __init__(self, input_depth, total_key_depth, total_value_depth, output_depth,
-                 num_heads, bias_mask=None, dropout=0.0, attention_map=False):
+    def __init__(
+        self,
+        input_depth,
+        total_key_depth,
+        total_value_depth,
+        output_depth,
+        num_heads,
+        bias_mask=None,
+        dropout=0.0,
+        attention_map=False,
+    ):
         """
         Parameters:
             input_depth: Size of last dimension of input
@@ -110,11 +136,15 @@ class MultiHeadAttention(nn.Module):
         # Checks borrowed from
         # https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/layers/common_attention.py
         if total_key_depth % num_heads != 0:
-            raise ValueError("Key depth (%d) must be divisible by the number of "
-                             "attention heads (%d)." % (total_key_depth, num_heads))
+            raise ValueError(
+                "Key depth (%d) must be divisible by the number of "
+                "attention heads (%d)." % (total_key_depth, num_heads)
+            )
         if total_value_depth % num_heads != 0:
-            raise ValueError("Value depth (%d) must be divisible by the number of "
-                             "attention heads (%d)." % (total_value_depth, num_heads))
+            raise ValueError(
+                "Value depth (%d) must be divisible by the number of "
+                "attention heads (%d)." % (total_value_depth, num_heads)
+            )
 
         self.attention_map = attention_map
 
@@ -141,7 +171,9 @@ class MultiHeadAttention(nn.Module):
         if len(x.shape) != 3:
             raise ValueError("x must have rank 3")
         shape = x.shape
-        return x.view(shape[0], shape[1], self.num_heads, shape[2] // self.num_heads).permute(0, 2, 1, 3)
+        return x.view(
+            shape[0], shape[1], self.num_heads, shape[2] // self.num_heads
+        ).permute(0, 2, 1, 3)
 
     def _merge_heads(self, x):
         """
@@ -154,10 +186,13 @@ class MultiHeadAttention(nn.Module):
         if len(x.shape) != 4:
             raise ValueError("x must have rank 4")
         shape = x.shape
-        return x.permute(0, 2, 1, 3).contiguous().view(shape[0], shape[2], shape[3] * self.num_heads)
+        return (
+            x.permute(0, 2, 1, 3)
+            .contiguous()
+            .view(shape[0], shape[2], shape[3] * self.num_heads)
+        )
 
     def forward(self, queries, keys, values):
-
         # Do a linear for each component
         queries = self.query_linear(queries)
         keys = self.key_linear(keys)
@@ -176,7 +211,9 @@ class MultiHeadAttention(nn.Module):
 
         # Add bias to mask future values
         if self.bias_mask is not None:
-            logits += self.bias_mask[:, :, :logits.shape[-2], :logits.shape[-1]].type_as(logits.data)
+            logits += self.bias_mask[
+                :, :, : logits.shape[-2], : logits.shape[-1]
+            ].type_as(logits.data)
 
         # Convert to probabilites
         weights = nn.functional.softmax(logits, dim=-1)
@@ -216,9 +253,15 @@ class Conv(nn.Module):
                       both -> pad on both sides
         """
         super(Conv, self).__init__()
-        padding = (kernel_size - 1, 0) if pad_type == 'left' else (kernel_size // 2, (kernel_size - 1) // 2)
+        padding = (
+            (kernel_size - 1, 0)
+            if pad_type == "left"
+            else (kernel_size // 2, (kernel_size - 1) // 2)
+        )
         self.pad = nn.ConstantPad1d(padding, 0)
-        self.conv = nn.Conv1d(input_size, output_size, kernel_size=kernel_size, padding=0)
+        self.conv = nn.Conv1d(
+            input_size, output_size, kernel_size=kernel_size, padding=0
+        )
 
     def forward(self, inputs):
         inputs = self.pad(inputs.permute(0, 2, 1))
@@ -232,7 +275,15 @@ class PositionwiseFeedForward(nn.Module):
     Does a Linear + RELU + Linear on each of the timesteps
     """
 
-    def __init__(self, input_depth, filter_size, output_depth, layer_config='ll', padding='left', dropout=0.0):
+    def __init__(
+        self,
+        input_depth,
+        filter_size,
+        output_depth,
+        layer_config="ll",
+        padding="left",
+        dropout=0.0,
+    ):
         """
         Parameters:
             input_depth: Size of last dimension of input
@@ -247,14 +298,16 @@ class PositionwiseFeedForward(nn.Module):
         super(PositionwiseFeedForward, self).__init__()
 
         layers = []
-        sizes = ([(input_depth, filter_size)] +
-                 [(filter_size, filter_size)] * (len(layer_config) - 2) +
-                 [(filter_size, output_depth)])
+        sizes = (
+            [(input_depth, filter_size)]
+            + [(filter_size, filter_size)] * (len(layer_config) - 2)
+            + [(filter_size, output_depth)]
+        )
 
         for lc, s in zip(list(layer_config), sizes):
-            if lc == 'l':
+            if lc == "l":
                 layers.append(nn.Linear(*s))
-            elif lc == 'c':
+            elif lc == "c":
                 layers.append(Conv(*s, kernel_size=3, pad_type=padding))
             else:
                 raise ValueError("Unknown layer type {}".format(lc))

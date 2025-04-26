@@ -29,71 +29,69 @@ References
 
 """
 
+import mir_eval
 import numpy as np
 import pandas as pd
-import mir_eval
 
+CHORD_DTYPE = [
+    ("root", np.int),
+    ("bass", np.int),
+    ("intervals", np.int, (12,)),
+    ("is_major", np.bool),
+]
 
-CHORD_DTYPE = [('root', np.int),
-               ('bass', np.int),
-               ('intervals', np.int, (12,)),
-               ('is_major',np.bool)]
-
-CHORD_ANN_DTYPE = [('start', np.float),
-                   ('end', np.float),
-                   ('chord', CHORD_DTYPE)]
+CHORD_ANN_DTYPE = [("start", float), ("end", float), ("chord", CHORD_DTYPE)]
 
 NO_CHORD = (-1, -1, np.zeros(12, dtype=np.int), False)
 UNKNOWN_CHORD = (-1, -1, np.ones(12, dtype=np.int) * -1, False)
 
-PITCH_CLASS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+PITCH_CLASS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 
 def idx_to_chord(idx):
     if idx == 24:
         return "-"
     elif idx == 25:
-        return u"\u03B5"
+        return "\u03b5"
 
     minmaj = idx % 2
     root = idx // 2
 
     return PITCH_CLASS[root] + ("M" if minmaj == 0 else "m")
 
-class Chords:
 
+class Chords:
     def __init__(self):
         self._shorthands = {
-            'maj': self.interval_list('(1,3,5)'),
-            'min': self.interval_list('(1,b3,5)'),
-            'dim': self.interval_list('(1,b3,b5)'),
-            'aug': self.interval_list('(1,3,#5)'),
-            'maj7': self.interval_list('(1,3,5,7)'),
-            'min7': self.interval_list('(1,b3,5,b7)'),
-            '7': self.interval_list('(1,3,5,b7)'),
-            '6': self.interval_list('(1,6)'),  # custom
-            '5': self.interval_list('(1,5)'),
-            '4': self.interval_list('(1,4)'),  # custom
-            '1': self.interval_list('(1)'),
-            'dim7': self.interval_list('(1,b3,b5,bb7)'),
-            'hdim7': self.interval_list('(1,b3,b5,b7)'),
-            'minmaj7': self.interval_list('(1,b3,5,7)'),
-            'maj6': self.interval_list('(1,3,5,6)'),
-            'min6': self.interval_list('(1,b3,5,6)'),
-            '9': self.interval_list('(1,3,5,b7,9)'),
-            'maj9': self.interval_list('(1,3,5,7,9)'),
-            'min9': self.interval_list('(1,b3,5,b7,9)'),
-            'sus2': self.interval_list('(1,2,5)'),
-            'sus4': self.interval_list('(1,4,5)'),
-            '11': self.interval_list('(1,3,5,b7,9,11)'),
-            'min11': self.interval_list('(1,b3,5,b7,9,11)'),
-            '13': self.interval_list('(1,3,5,b7,13)'),
-            'maj13': self.interval_list('(1,3,5,7,13)'),
-            'min13': self.interval_list('(1,b3,5,b7,13)')
+            "maj": self.interval_list("(1,3,5)"),
+            "min": self.interval_list("(1,b3,5)"),
+            "dim": self.interval_list("(1,b3,b5)"),
+            "aug": self.interval_list("(1,3,#5)"),
+            "maj7": self.interval_list("(1,3,5,7)"),
+            "min7": self.interval_list("(1,b3,5,b7)"),
+            "7": self.interval_list("(1,3,5,b7)"),
+            "6": self.interval_list("(1,6)"),  # custom
+            "5": self.interval_list("(1,5)"),
+            "4": self.interval_list("(1,4)"),  # custom
+            "1": self.interval_list("(1)"),
+            "dim7": self.interval_list("(1,b3,b5,bb7)"),
+            "hdim7": self.interval_list("(1,b3,b5,b7)"),
+            "minmaj7": self.interval_list("(1,b3,5,7)"),
+            "maj6": self.interval_list("(1,3,5,6)"),
+            "min6": self.interval_list("(1,b3,5,6)"),
+            "9": self.interval_list("(1,3,5,b7,9)"),
+            "maj9": self.interval_list("(1,3,5,7,9)"),
+            "min9": self.interval_list("(1,b3,5,b7,9)"),
+            "sus2": self.interval_list("(1,2,5)"),
+            "sus4": self.interval_list("(1,4,5)"),
+            "11": self.interval_list("(1,3,5,b7,9,11)"),
+            "min11": self.interval_list("(1,b3,5,b7,9,11)"),
+            "13": self.interval_list("(1,3,5,b7,13)"),
+            "maj13": self.interval_list("(1,3,5,7,13)"),
+            "min13": self.interval_list("(1,b3,5,b7,13)"),
         }
 
     def chords(self, labels):
-
         """
         Transform a list of chord labels into an array of internal numeric
         representations.
@@ -122,13 +120,17 @@ class Chords:
         return crds
 
     def label_error_modify(self, label):
-        if label == 'Emin/4': label = 'E:min/4'
-        elif label == 'A7/3': label = 'A:7/3'
-        elif label == 'Bb7/3': label = 'Bb:7/3'
-        elif label == 'Bb7/5': label = 'Bb:7/5'
-        elif label.find(':') == -1:
-            if label.find('min') != -1:
-                label = label[:label.find('min')] + ':' + label[label.find('min'):]
+        if label == "Emin/4":
+            label = "E:min/4"
+        elif label == "A7/3":
+            label = "A:7/3"
+        elif label == "Bb7/3":
+            label = "Bb:7/3"
+        elif label == "Bb7/5":
+            label = "Bb:7/5"
+        elif label.find(":") == -1:
+            if label.find("min") != -1:
+                label = label[: label.find("min")] + ":" + label[label.find("min") :]
         return label
 
     def chord(self, label):
@@ -151,39 +153,39 @@ class Chords:
         try:
             is_major = False
 
-            if label == 'N':
+            if label == "N":
                 return NO_CHORD
-            if label == 'X':
+            if label == "X":
                 return UNKNOWN_CHORD
 
             label = self.label_error_modify(label)
 
-            c_idx = label.find(':')
-            s_idx = label.find('/')
+            c_idx = label.find(":")
+            s_idx = label.find("/")
 
             if c_idx == -1:
-                quality_str = 'maj'
+                quality_str = "maj"
                 if s_idx == -1:
                     root_str = label
-                    bass_str = ''
+                    bass_str = ""
                 else:
                     root_str = label[:s_idx]
-                    bass_str = label[s_idx + 1:]
+                    bass_str = label[s_idx + 1 :]
             else:
                 root_str = label[:c_idx]
                 if s_idx == -1:
-                    quality_str = label[c_idx + 1:]
-                    bass_str = ''
+                    quality_str = label[c_idx + 1 :]
+                    bass_str = ""
                 else:
-                    quality_str = label[c_idx + 1:s_idx]
-                    bass_str = label[s_idx + 1:]
+                    quality_str = label[c_idx + 1 : s_idx]
+                    bass_str = label[s_idx + 1 :]
 
             root = self.pitch(root_str)
             bass = self.interval(bass_str) if bass_str else 0
             ivs = self.chord_intervals(quality_str)
             ivs[bass] = 1
 
-            if 'min' in quality_str:
+            if "min" in quality_str:
                 is_major = False
             else:
                 is_major = True
@@ -217,12 +219,12 @@ class Chords:
 
         """
         for m in modifier:
-            if m == 'b':
+            if m == "b":
                 base_pitch -= 1
-            elif m == '#':
+            elif m == "#":
                 base_pitch += 1
             else:
-                raise ValueError('Unknown modifier: {}'.format(m))
+                raise ValueError("Unknown modifier: {}".format(m))
         return base_pitch
 
     def pitch(self, pitch_str):
@@ -241,8 +243,12 @@ class Chords:
             Integer representation of a pitch class.
 
         """
-        return self.modify(self._chroma_id[(ord(pitch_str[0]) - ord('C')) % 7],
-                      pitch_str[1:]) % 12
+        return (
+            self.modify(
+                self._chroma_id[(ord(pitch_str[0]) - ord("C")) % 7], pitch_str[1:]
+            )
+            % 12
+        )
 
     def interval(self, interval_str):
         """
@@ -263,8 +269,12 @@ class Chords:
         """
         for i, c in enumerate(interval_str):
             if c.isdigit():
-                return self.modify(self._chroma_id[int(interval_str[i:]) - 1],
-                              interval_str[:i]) % 12
+                return (
+                    self.modify(
+                        self._chroma_id[int(interval_str[i:]) - 1], interval_str[:i]
+                    )
+                    % 12
+                )
 
     def interval_list(self, intervals_str, given_pitch_classes=None):
         """
@@ -288,9 +298,9 @@ class Chords:
         """
         if given_pitch_classes is None:
             given_pitch_classes = np.zeros(12, dtype=np.int)
-        for int_def in intervals_str[1:-1].split(','):
+        for int_def in intervals_str[1:-1].split(","):
             int_def = int_def.strip()
-            if int_def[0] == '*':
+            if int_def[0] == "*":
                 given_pitch_classes[self.interval(int_def[1:])] = 0
             else:
                 given_pitch_classes[self.interval(int_def)] = 1
@@ -314,14 +324,13 @@ class Chords:
             Binary pitch class representation of chord quality.
 
         """
-        list_idx = quality_str.find('(')
+        list_idx = quality_str.find("(")
         if list_idx == -1:
             return self._shorthands[quality_str].copy()
         if list_idx != 0:
             ivs = self._shorthands[quality_str[:list_idx]].copy()
         else:
             ivs = np.zeros(12, dtype=np.int)
-
 
         return self.interval_list(quality_str[list_idx:], ivs)
 
@@ -352,13 +361,11 @@ class Chords:
 
         """
         start, end, chord_labels = [], [], []
-        with open(filename, 'r') as f:
+        with open(filename, "r") as f:
             for line in f:
                 if line:
-
                     splits = line.split()
                     if len(splits) == 3:
-
                         s = splits[0]
                         e = splits[1]
                         l = splits[2]
@@ -368,9 +375,9 @@ class Chords:
                         chord_labels.append(l)
 
         crds = np.zeros(len(start), dtype=CHORD_ANN_DTYPE)
-        crds['start'] = start
-        crds['end'] = end
-        crds['chord'] = self.chords(chord_labels)
+        crds["start"] = start
+        crds["end"] = end
+        crds["chord"] = self.chords(chord_labels)
 
         return crds
 
@@ -402,40 +409,41 @@ class Chords:
                In Proceedings of ICASSP 2013, Vancouver, Canada, 2013.
 
         """
-        unison = chords['intervals'][:, 0].astype(bool)
-        maj_sec = chords['intervals'][:, 2].astype(bool)
-        min_third = chords['intervals'][:, 3].astype(bool)
-        maj_third = chords['intervals'][:, 4].astype(bool)
-        perf_fourth = chords['intervals'][:, 5].astype(bool)
-        dim_fifth = chords['intervals'][:, 6].astype(bool)
-        perf_fifth = chords['intervals'][:, 7].astype(bool)
-        aug_fifth = chords['intervals'][:, 8].astype(bool)
-        no_chord = (chords['intervals'] == NO_CHORD[-1]).all(axis=1)
+        unison = chords["intervals"][:, 0].astype(bool)
+        maj_sec = chords["intervals"][:, 2].astype(bool)
+        min_third = chords["intervals"][:, 3].astype(bool)
+        maj_third = chords["intervals"][:, 4].astype(bool)
+        perf_fourth = chords["intervals"][:, 5].astype(bool)
+        dim_fifth = chords["intervals"][:, 6].astype(bool)
+        perf_fifth = chords["intervals"][:, 7].astype(bool)
+        aug_fifth = chords["intervals"][:, 8].astype(bool)
+        no_chord = (chords["intervals"] == NO_CHORD[-1]).all(axis=1)
 
         reduced_chords = chords.copy()
-        ivs = reduced_chords['intervals']
+        ivs = reduced_chords["intervals"]
 
-        ivs[~no_chord] = self.interval_list('(1)')
-        ivs[unison & perf_fifth] = self.interval_list('(1,5)')
-        ivs[~perf_fourth & maj_sec] = self._shorthands['sus2']
-        ivs[perf_fourth & ~maj_sec] = self._shorthands['sus4']
+        ivs[~no_chord] = self.interval_list("(1)")
+        ivs[unison & perf_fifth] = self.interval_list("(1,5)")
+        ivs[~perf_fourth & maj_sec] = self._shorthands["sus2"]
+        ivs[perf_fourth & ~maj_sec] = self._shorthands["sus4"]
 
-        ivs[min_third] = self._shorthands['min']
-        ivs[min_third & aug_fifth & ~perf_fifth] = self.interval_list('(1,b3,#5)')
-        ivs[min_third & dim_fifth & ~perf_fifth] = self._shorthands['dim']
+        ivs[min_third] = self._shorthands["min"]
+        ivs[min_third & aug_fifth & ~perf_fifth] = self.interval_list("(1,b3,#5)")
+        ivs[min_third & dim_fifth & ~perf_fifth] = self._shorthands["dim"]
 
-        ivs[maj_third] = self._shorthands['maj']
-        ivs[maj_third & dim_fifth & ~perf_fifth] = self.interval_list('(1,3,b5)')
-        ivs[maj_third & aug_fifth & ~perf_fifth] = self._shorthands['aug']
+        ivs[maj_third] = self._shorthands["maj"]
+        ivs[maj_third & dim_fifth & ~perf_fifth] = self.interval_list("(1,3,b5)")
+        ivs[maj_third & aug_fifth & ~perf_fifth] = self._shorthands["aug"]
 
         if not keep_bass:
-            reduced_chords['bass'] = 0
+            reduced_chords["bass"] = 0
         else:
             # remove bass notes if they are not part of the intervals anymore
-            reduced_chords['bass'] *= ivs[range(len(reduced_chords)),
-                                          reduced_chords['bass']]
+            reduced_chords["bass"] *= ivs[
+                range(len(reduced_chords)), reduced_chords["bass"]
+            ]
         # keep -1 in bass for no chords
-        reduced_chords['bass'][no_chord] = -1
+        reduced_chords["bass"][no_chord] = -1
 
         return reduced_chords
 
@@ -450,93 +458,100 @@ class Chords:
 
     def get_converted_chord(self, filename):
         loaded_chord = self.load_chords(filename)
-        triads = self.reduce_to_triads(loaded_chord['chord'])
+        triads = self.reduce_to_triads(loaded_chord["chord"])
 
         df = self.assign_chord_id(triads)
-        df['start'] = loaded_chord['start']
-        df['end'] = loaded_chord['end']
+        df["start"] = loaded_chord["start"]
+        df["end"] = loaded_chord["end"]
 
         return df
 
     def assign_chord_id(self, entry):
         # maj, min chord only
         # if you want to add other chord, change this part and get_converted_chord(reduce_to_triads)
-        df = pd.DataFrame(data=entry[['root', 'is_major']])
-        df['chord_id'] = df.apply(lambda row: self.convert_to_id(row['root'], row['is_major']), axis=1)
+        df = pd.DataFrame(data=entry[["root", "is_major"]])
+        df["chord_id"] = df.apply(
+            lambda row: self.convert_to_id(row["root"], row["is_major"]), axis=1
+        )
         return df
 
     def convert_to_id_voca(self, root, quality):
         if root == -1:
             return 169
         else:
-            if quality == 'min':
+            if quality == "min":
                 return root * 14
-            elif quality == 'maj':
+            elif quality == "maj":
                 return root * 14 + 1
-            elif quality == 'dim':
+            elif quality == "dim":
                 return root * 14 + 2
-            elif quality == 'aug':
+            elif quality == "aug":
                 return root * 14 + 3
-            elif quality == 'min6':
+            elif quality == "min6":
                 return root * 14 + 4
-            elif quality == 'maj6':
+            elif quality == "maj6":
                 return root * 14 + 5
-            elif quality == 'min7':
+            elif quality == "min7":
                 return root * 14 + 6
-            elif quality == 'minmaj7':
+            elif quality == "minmaj7":
                 return root * 14 + 7
-            elif quality == 'maj7':
+            elif quality == "maj7":
                 return root * 14 + 8
-            elif quality == '7':
+            elif quality == "7":
                 return root * 14 + 9
-            elif quality == 'dim7':
+            elif quality == "dim7":
                 return root * 14 + 10
-            elif quality == 'hdim7':
+            elif quality == "hdim7":
                 return root * 14 + 11
-            elif quality == 'sus2':
+            elif quality == "sus2":
                 return root * 14 + 12
-            elif quality == 'sus4':
+            elif quality == "sus4":
                 return root * 14 + 13
             else:
                 return 168
 
     def get_converted_chord_voca(self, filename):
         loaded_chord = self.load_chords(filename)
-        triads = self.reduce_to_triads(loaded_chord['chord'])
-        df = pd.DataFrame(data=triads[['root', 'is_major']])
+        triads = self.reduce_to_triads(loaded_chord["chord"])
+        df = pd.DataFrame(data=triads[["root", "is_major"]])
 
         (ref_intervals, ref_labels) = mir_eval.io.load_labeled_intervals(filename)
         ref_labels = self.lab_file_error_modify(ref_labels)
         idxs = list()
         for i in ref_labels:
-            chord_root, quality, scale_degrees, bass = mir_eval.chord.split(i, reduce_extended_chords=True)
+            chord_root, quality, scale_degrees, bass = mir_eval.chord.split(
+                i, reduce_extended_chords=True
+            )
             root, bass, ivs, is_major = self.chord(i)
             idxs.append(self.convert_to_id_voca(root=root, quality=quality))
-        df['chord_id'] = idxs
+        df["chord_id"] = idxs
 
-        df['start'] = loaded_chord['start']
-        df['end'] = loaded_chord['end']
+        df["start"] = loaded_chord["start"]
+        df["end"] = loaded_chord["end"]
 
         return df
 
     def lab_file_error_modify(self, ref_labels):
         for i in range(len(ref_labels)):
-            if ref_labels[i][-2:] == ':4':
-                ref_labels[i] = ref_labels[i].replace(':4', ':sus4')
-            elif ref_labels[i][-2:] == ':6':
-                ref_labels[i] = ref_labels[i].replace(':6', ':maj6')
-            elif ref_labels[i][-4:] == ':6/2':
-                ref_labels[i] = ref_labels[i].replace(':6/2', ':maj6/2')
-            elif ref_labels[i] == 'Emin/4':
-                ref_labels[i] = 'E:min/4'
-            elif ref_labels[i] == 'A7/3':
-                ref_labels[i] = 'A:7/3'
-            elif ref_labels[i] == 'Bb7/3':
-                ref_labels[i] = 'Bb:7/3'
-            elif ref_labels[i] == 'Bb7/5':
-                ref_labels[i] = 'Bb:7/5'
-            elif ref_labels[i].find(':') == -1:
-                if ref_labels[i].find('min') != -1:
-                    ref_labels[i] = ref_labels[i][:ref_labels[i].find('min')] + ':' + ref_labels[i][ref_labels[i].find('min'):]
+            if ref_labels[i][-2:] == ":4":
+                ref_labels[i] = ref_labels[i].replace(":4", ":sus4")
+            elif ref_labels[i][-2:] == ":6":
+                ref_labels[i] = ref_labels[i].replace(":6", ":maj6")
+            elif ref_labels[i][-4:] == ":6/2":
+                ref_labels[i] = ref_labels[i].replace(":6/2", ":maj6/2")
+            elif ref_labels[i] == "Emin/4":
+                ref_labels[i] = "E:min/4"
+            elif ref_labels[i] == "A7/3":
+                ref_labels[i] = "A:7/3"
+            elif ref_labels[i] == "Bb7/3":
+                ref_labels[i] = "Bb:7/3"
+            elif ref_labels[i] == "Bb7/5":
+                ref_labels[i] = "Bb:7/5"
+            elif ref_labels[i].find(":") == -1:
+                if ref_labels[i].find("min") != -1:
+                    ref_labels[i] = (
+                        ref_labels[i][: ref_labels[i].find("min")]
+                        + ":"
+                        + ref_labels[i][ref_labels[i].find("min") :]
+                    )
         return ref_labels
-
