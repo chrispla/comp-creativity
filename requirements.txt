@@ -4,10 +4,10 @@ scikit-learn
 librosa
 soundfile
 pydub
-torch
-torchaudio
+torch==2.5.1
+torchaudio==2.5.1
 torchlibrosa==0.1.0
-torchvision
+torchvision==0.20.1
 transformers
 tokenizers
 einops
@@ -26,3 +26,4 @@ xformers
 accelerate
 ftfy
 Pillow
+ipykernel
