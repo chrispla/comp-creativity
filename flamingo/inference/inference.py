@@ -268,7 +268,7 @@ def caption_from_file(input_file, output_file=None):
     }
 
     # Create CSV file and write header
-    if output_file != None:
+    if output_file is not None:
         with open(output_file, "w", newline="", encoding="utf-8") as csvfile:
             csv_writer = csv.writer(csvfile)
             csv_writer.writerow(["audio_path", "response"])
@@ -302,7 +302,7 @@ def caption_from_file(input_file, output_file=None):
                 device_id,
                 cast_dtype,
             )
-            responses.append(responses)
+            responses.append(response)
         return responses
 
 
